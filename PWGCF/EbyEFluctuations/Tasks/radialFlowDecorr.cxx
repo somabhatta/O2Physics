@@ -67,59 +67,61 @@ using namespace constants::math;
 struct RadialFlowDecorr {
 
   static constexpr int KIntM = 3;
-    static constexpr int KIntK = 3;
+  static constexpr int KIntK = 3;
 
-    static constexpr int KNEta = 17;
-    static constexpr int KNpT = 3;
+  static constexpr int KNEta = 17;
+  static constexpr int KNpT = 3;
 
-    // --- Linter Fixes: Magic Numbers ---
-    static constexpr float KFloatEpsilon = 1e-6f;
-    // static constexpr int KPiPlus = o2::constants::physics::Pdg::kPiPlus;
-    // static constexpr int KKPlus = o2::constants::physics::Pdg::kKaPlus;
-    // static constexpr int KProton = o2::constants::physics::Pdg::kProton;
-    static constexpr float KCentTestMin = 10.f;
-    static constexpr float KCentTestMaxLo = 60.f;
-    static constexpr float KCentTestMaxHi = 70.f;
-    static constexpr float KCentCovCut = 1.0f;
-    static constexpr float KBinOffset = 0.5f;
-    static constexpr float KHalf = 0.5f;
-    static constexpr float KPhiMin = 0.f; // Added for magic number fix
-    // Histogram axis definitions
-    static constexpr int KNbinsZvtx = 240;
-    static constexpr float KZvtxMin = -12.f;
-    static constexpr float KZvtxMax = 12.f;
-    static constexpr int KNbinsP = 100;
-    static constexpr float KPMin = 0.f;
-    static constexpr float KPMax = 10.f;
-    static constexpr int KNbinsPt = 200;
-    static constexpr float KPtMin = 0.f;
-    static constexpr float KPtMax = 10.f;
-    static constexpr int KNbinsEta = 120;
-    static constexpr float KEtaMin = -1.2f;
-    static constexpr float KEtaMax = 1.2f;
-    static constexpr int KNbinsPhi = 64;
-    static constexpr float KEtaAxisMin = -0.8f;
-    static constexpr float KEtaAxisMax = 0.8f;
-    static constexpr int KNbinsPhiFine = 30;
-    static constexpr int KNbinsPtRes = 50;
-    static constexpr float KPtResMax = 1.f;
-    static constexpr int KNbinsEtaRes = 100;
-    static constexpr float KEtaResMax = 0.5f;
-    static constexpr int KNbinsVz = 80;
-    static constexpr float KVzMin = -40.f;
-    static constexpr float KVzMax = 40.f;
-    static constexpr float KVzResMax = 20.f;
-    static constexpr int KNbinsEtaFine = 20;
-    static constexpr float KEtaFineMax = 1.f;
-    static constexpr int KNbinsDca = 400;
-    static constexpr float KDcaMax = 0.2f;
-    static constexpr int KNbinsPtCoarse = 50;
-    static constexpr float KPtMinDefault = 0.2f;
-    static constexpr float KPtMidMax = 3.0f;
-    static constexpr float KPtHighMax = 5.0f;
-    static constexpr float KPtFullMax = 10.0f;
-    static constexpr float KCentMax = 90;
-  enum PID { kInclusive = 0, kCombinedPID, kNumPID };
+  // --- Linter Fixes: Magic Numbers ---
+  static constexpr float KFloatEpsilon = 1e-6f;
+  // static constexpr int KPiPlus = o2::constants::physics::Pdg::kPiPlus;
+  // static constexpr int KKPlus = o2::constants::physics::Pdg::kKaPlus;
+  // static constexpr int KProton = o2::constants::physics::Pdg::kProton;
+  static constexpr float KCentTestMin = 10.f;
+  static constexpr float KCentTestMaxLo = 60.f;
+  static constexpr float KCentTestMaxHi = 70.f;
+  static constexpr float KCentCovCut = 1.0f;
+  static constexpr float KBinOffset = 0.5f;
+  static constexpr float KHalf = 0.5f;
+  static constexpr float KPhiMin = 0.f; // Added for magic number fix
+  // Histogram axis definitions
+  static constexpr int KNbinsZvtx = 240;
+  static constexpr float KZvtxMin = -12.f;
+  static constexpr float KZvtxMax = 12.f;
+  static constexpr int KNbinsP = 100;
+  static constexpr float KPMin = 0.f;
+  static constexpr float KPMax = 10.f;
+  static constexpr int KNbinsPt = 200;
+  static constexpr float KPtMin = 0.f;
+  static constexpr float KPtMax = 10.f;
+  static constexpr int KNbinsEta = 120;
+  static constexpr float KEtaMin = -1.2f;
+  static constexpr float KEtaMax = 1.2f;
+  static constexpr int KNbinsPhi = 64;
+  static constexpr float KEtaAxisMin = -0.8f;
+  static constexpr float KEtaAxisMax = 0.8f;
+  static constexpr int KNbinsPhiFine = 30;
+  static constexpr int KNbinsPtRes = 50;
+  static constexpr float KPtResMax = 1.f;
+  static constexpr int KNbinsEtaRes = 100;
+  static constexpr float KEtaResMax = 0.5f;
+  static constexpr int KNbinsVz = 80;
+  static constexpr float KVzMin = -40.f;
+  static constexpr float KVzMax = 40.f;
+  static constexpr float KVzResMax = 20.f;
+  static constexpr int KNbinsEtaFine = 20;
+  static constexpr float KEtaFineMax = 1.f;
+  static constexpr int KNbinsDca = 400;
+  static constexpr float KDcaMax = 0.2f;
+  static constexpr int KNbinsPtCoarse = 50;
+  static constexpr float KPtMinDefault = 0.2f;
+  static constexpr float KPtMidMax = 3.0f;
+  static constexpr float KPtHighMax = 5.0f;
+  static constexpr float KPtFullMax = 10.0f;
+  static constexpr float KCentMax = 90;
+  enum PID { kInclusive = 0,
+             kCombinedPID,
+             kNumPID };
   enum ECentralityEstimator {
     kCentFT0C = 1,
     kCentFT0A = 2,
@@ -136,20 +138,20 @@ struct RadialFlowDecorr {
     0.8,
     -0.7, -0.6, -0.5, -0.4, -0.3, -0.2, -0.1, 0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8};
 
-      const std::vector<float> pTLw = {KPtMinDefault, KPtMinDefault, KPtMinDefault};
-      const std::vector<float> pTUp = {KPtMidMax, KPtHighMax, KPtFullMax};
-      //==============================
-      // Configurables
-      //==============================
-      Configurable<float> cfgVtxZCut{"cfgVtxZCut", 10.f, "z-vertex range"};
-      Configurable<float> cfgPtMin{"cfgPtMin", 0.2f, "min pT"};
-      Configurable<float> cfgPtMax{"cfgPtMax", 10.0f, "max pT"};
-      Configurable<float> cfgEtaCut{"cfgEtaCut", 0.8f, "|η| cut"};
-      Configurable<float> cfgDCAXY{"cfgDCAXY", 2.4f, "DCAxy cut"};
-      Configurable<float> cfgDCAZ{"cfgDCAZ", 3.2f, "DCAz cut"};
-      Configurable<float> cfgTPCClsMin{"cfgTPCClsMin", 70.f, "min TPC clusters"};
-      Configurable<float> cfgChi2TPCMax{"cfgChi2TPCMax", 4.0f, "max TPC χ²"};
-      Configurable<float> cfgPIDnSigmaCut{"cfgPIDnSigmaCut", 3.f, "TPC PID |nσ| cut"};
+  const std::vector<float> pTLw = {KPtMinDefault, KPtMinDefault, KPtMinDefault};
+  const std::vector<float> pTUp = {KPtMidMax, KPtHighMax, KPtFullMax};
+  //==============================
+  //  Configurables
+  //==============================
+  Configurable<float> cfgVtxZCut{"cfgVtxZCut", 10.f, "z-vertex range"};
+  Configurable<float> cfgPtMin{"cfgPtMin", 0.2f, "min pT"};
+  Configurable<float> cfgPtMax{"cfgPtMax", 10.0f, "max pT"};
+  Configurable<float> cfgEtaCut{"cfgEtaCut", 0.8f, "|η| cut"};
+  Configurable<float> cfgDCAXY{"cfgDCAXY", 2.4f, "DCAxy cut"};
+  Configurable<float> cfgDCAZ{"cfgDCAZ", 3.2f, "DCAz cut"};
+  Configurable<float> cfgTPCClsMin{"cfgTPCClsMin", 70.f, "min TPC clusters"};
+  Configurable<float> cfgChi2TPCMax{"cfgChi2TPCMax", 4.0f, "max TPC χ²"};
+  Configurable<float> cfgPIDnSigmaCut{"cfgPIDnSigmaCut", 3.f, "TPC PID |nσ| cut"};
 
   Configurable<float> cfgCutVertex{"cfgCutVertex", 10.0f, "Accepted z-vertex range"};
   Configurable<float> cfgCutTpcChi2NCl{"cfgCutTpcChi2NCl", 2.5f, "Maximum TPCchi2NCl"};
@@ -1188,7 +1190,7 @@ struct RadialFlowDecorr {
               if (pt <= pTLw[ipt] || pt > pTUp[ipt])
                 continue;
               sumWiTruth[ieta][ipt]++;
-              sumWiptiTruth[ieta][ipt] +=  pt;
+              sumWiptiTruth[ieta][ipt] += pt;
               if (isPion || isKaon || isProton) {
                 float m = isPion ? o2::constants::physics::MassPiPlus : isKaon ? o2::constants::physics::MassKPlus
                                                                                : o2::constants::physics::MassProton;
@@ -1259,7 +1261,7 @@ struct RadialFlowDecorr {
             float effPid = getEfficiency(col.multNTracksPV(), pt, eta, kCombinedPID, 0);
             float fakePid = getEfficiency(col.multNTracksPV(), pt, eta, kCombinedPID, 1);
             float flatWeightPid = getFlatteningWeight(cent, eta, phi, kCombinedPID);
-            float wPid =  flatWeightPid * (1.0 - fakePid) / effPid;
+            float wPid = flatWeightPid * (1.0 - fakePid) / effPid;
 
             histos.fill(HIST("hCentEtaPhiWtd_PID"), cent, eta, track.phi(), flatWeightPid);
             if (cent < KCentTestMin)
@@ -1426,7 +1428,8 @@ struct RadialFlowDecorr {
     for (const auto& mcCollision : mcColl) {
       auto partSlice = mcParticles.sliceBy(partPerMcCollision, mcCollision.globalIndex());
       auto colSlice = collisions.sliceBy(colPerMcCollision, mcCollision.globalIndex());
-      if (colSlice.size() != 1) continue;
+      if (colSlice.size() != 1)
+        continue;
       // histos.fill(HIST("MCGen/hVtxZ"), mcCollision.posZ());
       for (const auto& col : colSlice) {
 
@@ -1536,7 +1539,7 @@ struct RadialFlowDecorr {
           if (!std::isfinite(wIncl) || wIncl <= 0.f)
             continue;
           if (effIncl <= 0 || !isfinite(effIncl) || !isfinite(fakeIncl) || !isfinite(flatWeightIncl))
-             continue;
+            continue;
 
           for (int ieta = 0; ieta < KNEta; ++ieta) {
             if (eta <= etaLw[ieta] || eta > etaUp[ieta])
