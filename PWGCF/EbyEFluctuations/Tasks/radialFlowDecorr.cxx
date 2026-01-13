@@ -418,7 +418,7 @@ struct RadialFlowDecorr {
     float val = h->GetBinContent(ibx, iby, ibz);
     return val;
     */
-    return 1.0;//set to 1 for now, will be restored later
+    return 1.0; // set to 1 for now, will be restored later
   }
 
   template <int KIntM, int KIntK>
@@ -793,10 +793,14 @@ struct RadialFlowDecorr {
     declareCommonQA();
 
     std::string userCcdbPath;
-    if(cfgSys==1) userCcdbPath = "/Users/s/somadutt/PbPbTest/";
-    if(cfgSys==2) userCcdbPath = "/Users/s/somadutt/OOTest/";
-    if(cfgSys==3) userCcdbPath = "/Users/s/somadutt/pPbTest/";
-    if(cfgSys==4) userCcdbPath = "/Users/s/somadutt/ppTest/";
+    if (cfgSys == 1)
+      userCcdbPath = "/Users/s/somadutt/PbPbTest/";
+    if (cfgSys == 2)
+      userCcdbPath = "/Users/s/somadutt/OOTest/";
+    if (cfgSys == 3)
+      userCcdbPath = "/Users/s/somadutt/pPbTest/";
+    if (cfgSys == 4)
+      userCcdbPath = "/Users/s/somadutt/ppTest/";
 
     if (cfgRunMCMean || cfgRunMCFluc || cfgRunGetEff) {
       declareMCCommonHists();
