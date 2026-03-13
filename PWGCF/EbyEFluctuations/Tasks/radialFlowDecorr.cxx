@@ -202,9 +202,10 @@ struct RadialFlowDecorr {
   Configurable<float> cfgPupnSig{"cfgPupnSig", 3.0f, "Additional Pileup Cut"};
   Configurable<bool> cfgApplySigPupCut{"cfgApplySigPupCut", 0, "nSig Pileup Cut"};
   Configurable<bool> cfgApplyLinPupCut{"cfgApplyLinPupCut", 0, "Lin Pileup Cut"};
-
-  Configurable<float> cfgLinPupParam0{"cfgLinPupParam0", 3.0f, "Linear Pileup Cut Const"};
-  Configurable<float> cfgLinPupParam1{"cfgLinPupParam1", 3.0f, "Linear Pileup Slope"};
+  Configurable<float> cfgLinPupParam0{"cfgLinPupParam0", 3.0f, "(Upper) Linear Pileup Cut Const"};
+  Configurable<float> cfgLinPupParam1{"cfgLinPupParam1", 3.0f, "(Upper) Linear Pileup Slope"};
+  Configurable<float> cfgLinPupParam2{"cfgLinPupParam2", 3.0f, "(Lower) Linear Pileup Cut Const"};
+  Configurable<float> cfgLinPupParam3{"cfgLinPupParam3", 3.0f, "(Lower) Linear Pileup Slope"};
 
   Configurable<int> cfgNchPbMax{"cfgNchPbMax", 10000, "Max Nch range for PbPb collisions"};
   Configurable<int> cfgNchOMax{"cfgNchOMax", 1000, "Max Nch range for OO collisions"};
@@ -549,9 +550,11 @@ struct RadialFlowDecorr {
     if (cfgApplyLinPupCut) {
       if (trksize > (cfgLinPupParam0 + cfgLinPupParam1 * multPV))
         return false;
+        histos.fill(HIST("hEvtCount"), 7.5);
+     if (trksize < (cfgLinPupParam2 + cfgLinPupParam3 * multPV))
+        return false;
+        histos.fill(HIST("hEvtCount"), 8.5);
     }
-    histos.fill(HIST("hEvtCount"), 7.5);
-
     return true;
   }
 
@@ -797,17 +800,7 @@ struct RadialFlowDecorr {
     aod::CentFT0Cs, aod::CentFT0Ms, aod::CentFDDMs, aod::CentFV0As,
     aod::CentNGlobals, aod::McCollisionLabels>;
 
-  using MyMCTracks = soa::Join<
-    aod::Tracks, aod::TrackSelection, aod::TracksExtra, aod::TracksDCA,
-    aod::McTrackLabels,
-    aod::pidTPCFullPi, aod::pidTPCFullKa, aod::pidTPCFullPr, aod::pidTPCFullEl,
-    aod::pidTOFFullPi, aod::pidTOFFullKa, aod::pidTOFFullPr, aod::pidTOFFullEl>;
-
-  PresliceUnsorted<aod::McParticles> partPerMcCollision = aod::mcparticle::mcCollisionId;
-  PresliceUnsorted<MyRun3MCCollisions> colPerMcCollision = aod::mccollisionlabel::mcCollisionId;
-  PresliceUnsorted<TCs> trackPerMcParticle = aod::mctracklabel::mcParticleId;
-  Preslice<MyMCTracks> perCollision = aod::track::collisionId;
-  Preslice<FilteredTCs> trackPerCollision = aod::track::collisionId;
+    PresliceUnsorted<MyRun3MCCollisions> colPerMcCollision = aod::mccollisionlabel::mcCollisionId;
 
   void declareCommonQA()
   {
@@ -816,6 +809,10 @@ struct RadialFlowDecorr {
     histos.add("hCentrality", ";centrality (%)", kTH1F, {{centAxis1Per}});
     histos.add("Hist2D_globalTracks_PVTracks", ";N_{global};N_{PV}", kTH2F, {{nChAxis}, {nChAxis}});
     histos.add("Hist2D_cent_nch", ";N_{PV};cent (%)", kTH2F, {{nChAxis}, {centAxis1Per}});
+
+    histos.add("Hist2D_globalTracks_cent", "cent (%);N_{global}", kTH2F, {{centAxis1Per},{nChAxis}});
+    histos.add("Hist2D_PVTracks_cent", "cent (%);N_{PV}", kTH2F, {{centAxis1Per},{nChAxis}});
+
     histos.add("hP", ";p (GeV/c)", kTH1F, {{KNbinsPt, KPMin, KPMax}});
     histos.add("hPt", ";p_{T} (GeV/c)", kTH1F, {{KNbinsPt, KPtMin, KPtMax}});
     histos.add("hEta", ";#eta", kTH1F, {{KNbinsEtaFine, KEtaMin, KEtaMax}});
@@ -829,7 +826,8 @@ struct RadialFlowDecorr {
     histos.get<TH1>(HIST("hEvtCount"))->GetXaxis()->SetBinLabel(5, "after kIsGoodZvtxFT0vsPV");
     histos.get<TH1>(HIST("hEvtCount"))->GetXaxis()->SetBinLabel(6, "after kIsGoodITSLayersAll");
     histos.get<TH1>(HIST("hEvtCount"))->GetXaxis()->SetBinLabel(7, "after PVTracksCent Pileup Cut");
-    histos.get<TH1>(HIST("hEvtCount"))->GetXaxis()->SetBinLabel(8, "after Linear Pileup Cut");
+    histos.get<TH1>(HIST("hEvtCount"))->GetXaxis()->SetBinLabel(8, "after Linear Pileup Cut (Up)");
+    histos.get<TH1>(HIST("hEvtCount"))->GetXaxis()->SetBinLabel(9, "after Linear Pileup Cut (Lw)");
 
     histos.add("hTrkCount", "Number of Tracks;; Count", kTH1F, {{11, 0, 11}});
     histos.get<TH1>(HIST("hTrkCount"))->GetXaxis()->SetBinLabel(1, "all Tracks");
@@ -1436,74 +1434,52 @@ struct RadialFlowDecorr {
     LOGF(info, "CCDB initialization complete for RadialFlowDecorr.");
   }
 
-  void processMCGetMeanNsig(aod::McCollisions const& mcColl, MyRun3MCCollisions const& collisions, TCs const& tracks, FilteredTCs const& /*filteredTracks*/, aod::McParticles const& mcParticles)
+  void processMCGetMeanNsig(MyRun3MCCollisions::iterator const& mcCollision, FilteredTCs const& mcTracks)
   {
-    for (const auto& mcCollision : mcColl) {
-      auto colSlice = collisions.sliceBy(colPerMcCollision, mcCollision.globalIndex());
-      if (colSlice.size() != 1)
-        continue;
-      for (const auto& col : colSlice) {
-        histos.fill(HIST("hVtxZ"), col.posZ());
-        if (!col.has_mcCollision() || !isEventSelected(col))
-          continue;
-        auto trackSlice = tracks.sliceBy(trackPerCollision, col.globalIndex());
-        auto partSlice = mcParticles.sliceBy(partPerMcCollision, mcCollision.globalIndex());
-        if (trackSlice.size() < 1 || partSlice.size() < 1)
-          continue;
-        float cent = getCentrality(col);
+        histos.fill(HIST("hVtxZ"), mcCollision.posZ());
+        if (!mcCollision.has_mcCollision() || !isEventSelected(mcCollision))
+          return;
+        float cent = getCentrality(mcCollision);
         if (cent > KCentMax)
-          continue;
-        float multPV = col.multNTracksPV();
+          return;
+        float multPV = mcCollision.multNTracksPV();
 
-        histos.fill(HIST("hVtxZ_after_sel"), col.posZ());
+        histos.fill(HIST("hVtxZ_after_sel"), mcCollision.posZ());
         histos.fill(HIST("hCentrality"), cent);
+        histos.fill(HIST("Hist2D_globalTracks_PVTracks"), multPV, mcTracks.size());
+        histos.fill(HIST("Hist2D_cent_nch"), mcTracks.size(), cent);
+        histos.fill(HIST("Hist2D_globalTracks_cent"), cent, mcTracks.size());
+        histos.fill(HIST("Hist2D_PVTracks_cent"), cent, multPV);
 
-        histos.fill(HIST("Hist2D_globalTracks_PVTracks"), multPV, trackSlice.size());
-        histos.fill(HIST("Hist2D_cent_nch"), trackSlice.size(), cent);
-        for (const auto& track : trackSlice) {
+        for (const auto& track : mcTracks) {
           if (!isTrackSelected(track))
             continue;
           fillNSigmaBefCut(track, cent);
         }
       }
-    }
-  }
   PROCESS_SWITCH(RadialFlowDecorr, processMCGetMeanNsig, "process MC to calculate Mean values of nSig Plots", cfgRunMCGetNSig);
 
-  void processGetEffHists(aod::McCollisions const& mcColl, MyRun3MCCollisions const& collisions, TCs const& tracks, FilteredTCs const& /*filteredTracks*/, aod::McParticles const& mcParticles)
+  void processGetEffHists(MyRun3MCCollisions::iterator const& mcCollision, FilteredTCs const& mcTracks, aod::McParticles const& mcParticles)
   {
-    for (const auto& mcCollision : mcColl) {
-      auto colSlice = collisions.sliceBy(colPerMcCollision, mcCollision.globalIndex());
-      if (colSlice.size() != 1)
-        continue;
-
-      for (const auto& col : colSlice) {
-        histos.fill(HIST("hVtxZ"), col.posZ());
-        if (!col.has_mcCollision() || !isEventSelected(col))
-          continue;
-
-        auto trackSlice = tracks.sliceBy(trackPerCollision, col.globalIndex());
-        auto partSlice = mcParticles.sliceBy(partPerMcCollision, mcCollision.globalIndex());
-        if (trackSlice.size() < 1 || partSlice.size() < 1)
-          continue;
-
-        float cent = getCentrality(col);
-
+        histos.fill(HIST("hVtxZ"), mcCollision.posZ());
+        if (!mcCollision.has_mcCollision() || !isEventSelected(mcCollision))
+          return;
+        float cent = getCentrality(mcCollision);
         if (cent > KCentMax)
-          continue;
-        float multPV = col.multNTracksPV();
-        float vz = col.posZ();
-
-        if (!isPassAddPileup(multPV, trackSlice.size(), cent))
-          continue;
-
-        histos.fill(HIST("hVtxZ_after_sel"), col.posZ());
+          return;
+        float multPV = mcCollision.multNTracksPV();
+        float vz = mcCollision.posZ();
+        if (!isPassAddPileup(multPV, mcTracks.size(), cent))
+          return;
+        histos.fill(HIST("hVtxZ_after_sel"), mcCollision.posZ());
         histos.fill(HIST("hCentrality"), cent);
 
-        histos.fill(HIST("Hist2D_globalTracks_PVTracks"), multPV, trackSlice.size());
-        histos.fill(HIST("Hist2D_cent_nch"), trackSlice.size(), cent);
+        histos.fill(HIST("Hist2D_globalTracks_PVTracks"), multPV, mcTracks.size());
+        histos.fill(HIST("Hist2D_cent_nch"), mcTracks.size(), cent);
+        histos.fill(HIST("Hist2D_globalTracks_cent"), cent, mcTracks.size());
+        histos.fill(HIST("Hist2D_PVTracks_cent"), cent, multPV);
 
-        for (const auto& particle : partSlice) {
+        for (const auto& particle : mcParticles) {
           if (!isParticleSelected(particle) || !particle.isPhysicalPrimary())
             continue;
 
@@ -1547,7 +1523,7 @@ struct RadialFlowDecorr {
             histos.fill(HIST("h3_AllPrimary_PrAll"), multPV, pt, eta);
         }
 
-        for (const auto& track : trackSlice) {
+        for (const auto& track : mcTracks) {
           if (!isTrackSelected(track))
             continue;
 
@@ -1735,42 +1711,32 @@ struct RadialFlowDecorr {
             }
           }
         }
-      }
-    }
   }
   PROCESS_SWITCH(RadialFlowDecorr, processGetEffHists, "process MC to calculate EffWeights", cfgRunGetEff);
 
-  void processMCFlat(aod::McCollisions const& mcColl, MyRun3MCCollisions const& collisions, TCs const& tracks, FilteredTCs const& /*filteredTracks*/)
+  void processMCFlat(MyRun3MCCollisions::iterator const& mcCollision, FilteredTCs const& mcTracks)
   {
-    for (const auto& mcCollision : mcColl) {
-      auto colSlice = collisions.sliceBy(colPerMcCollision, mcCollision.globalIndex());
-      if (colSlice.size() != 1)
-        continue;
+        histos.fill(HIST("hVtxZ"), mcCollision.posZ());
+        if (!mcCollision.has_mcCollision() || !isEventSelected(mcCollision))
+          return;
 
-      for (const auto& col : colSlice) {
-        histos.fill(HIST("hVtxZ"), col.posZ());
-        if (!col.has_mcCollision() || !isEventSelected(col))
-          continue;
-
-        float cent = getCentrality(col);
+        float cent = getCentrality(mcCollision);
         if (cent > KCentMax)
-          continue;
+          return;
 
-        auto trackSlice = tracks.sliceBy(trackPerCollision, col.globalIndex());
-        if (trackSlice.size() < 1)
-          continue;
+        float multPV = mcCollision.multNTracksPV();
+        float vz = mcCollision.posZ();
 
-        float multPV = col.multNTracksPV();
-        float vz = col.posZ();
-
-        if (!isPassAddPileup(multPV, trackSlice.size(), cent))
-          continue;
-        histos.fill(HIST("hVtxZ_after_sel"), col.posZ());
+        if (!isPassAddPileup(multPV, mcTracks.size(), cent))
+          return;
+        histos.fill(HIST("hVtxZ_after_sel"), mcCollision.posZ());
         histos.fill(HIST("hCentrality"), cent);
 
-        histos.fill(HIST("Hist2D_globalTracks_PVTracks"), col.multNTracksPV(), trackSlice.size());
-        histos.fill(HIST("Hist2D_cent_nch"), trackSlice.size(), cent);
-        for (const auto& track : trackSlice) {
+        histos.fill(HIST("Hist2D_globalTracks_PVTracks"), mcCollision.multNTracksPV(), mcTracks.size());
+        histos.fill(HIST("Hist2D_cent_nch"), mcTracks.size(), cent);
+        histos.fill(HIST("Hist2D_globalTracks_cent"), cent, mcTracks.size());
+        histos.fill(HIST("Hist2D_PVTracks_cent"), cent, multPV);
+        for (const auto& track : mcTracks) {
           if (!isTrackSelected(track))
             continue;
 
@@ -1839,46 +1805,32 @@ struct RadialFlowDecorr {
             }
           }
         }
-      }
-    }
   }
   PROCESS_SWITCH(RadialFlowDecorr, processMCFlat, "process MC to calculate FlatWeights", cfgRunGetMCFlat);
 
-  void processMCMean(aod::McCollisions const& mcColl, MyRun3MCCollisions const& collisions, TCs const& tracks, FilteredTCs const& /*filteredTracks*/, aod::FT0s const&, aod::McParticles const& mcParticles)
+  void processMCMean(MyRun3MCCollisions::iterator const& mcCollision, FilteredTCs const& mcTracks, aod::FT0s const&, aod::McParticles const& mcParticles)
   {
     double sumWiTruth[KNsp][KNEta]{}, sumWiptiTruth[KNsp][KNEta]{};
     double sumWiReco[KNsp][KNEta]{}, sumWiptiReco[KNsp][KNEta]{};
     double sumWiRecoEffCorr[KNsp][KNEta]{}, sumWiptiRecoEffCorr[KNsp][KNEta]{};
-
-    for (const auto& mcCollision : mcColl) {
-      auto colSlice = collisions.sliceBy(colPerMcCollision, mcCollision.globalIndex());
-      if (colSlice.size() != 1)
-        continue;
-
-      for (const auto& col : colSlice) {
-        histos.fill(HIST("hVtxZ"), col.posZ());
-        if (!col.has_mcCollision() || !isEventSelected(col))
-          continue;
-
-        auto trackSlice = tracks.sliceBy(trackPerCollision, col.globalIndex());
-        auto partSlice = mcParticles.sliceBy(partPerMcCollision, mcCollision.globalIndex());
-        if (trackSlice.size() < 1 || partSlice.size() < 1)
-          continue;
-
-        float cent = getCentrality(col);
+        histos.fill(HIST("hVtxZ"), mcCollision.posZ());
+        if (!mcCollision.has_mcCollision() || !isEventSelected(mcCollision))
+          return;
+        float cent = getCentrality(mcCollision);
         if (cent > KCentMax)
-          continue;
-        float multPV = col.multNTracksPV();
-        float vz = col.posZ();
+          return;
+        float multPV = mcCollision.multNTracksPV();
+        float vz = mcCollision.posZ();
+        if (!isPassAddPileup(multPV, mcTracks.size(), cent))
+          return;
 
-        if (!isPassAddPileup(multPV, trackSlice.size(), cent))
-          continue;
-
-        histos.fill(HIST("hVtxZ_after_sel"), col.posZ());
+        histos.fill(HIST("hVtxZ_after_sel"), mcCollision.posZ());
         histos.fill(HIST("hCentrality"), cent);
 
-        histos.fill(HIST("Hist2D_globalTracks_PVTracks"), col.multNTracksPV(), trackSlice.size());
-        histos.fill(HIST("Hist2D_cent_nch"), trackSlice.size(), cent);
+        histos.fill(HIST("Hist2D_globalTracks_PVTracks"), mcCollision.multNTracksPV(), mcTracks.size());
+        histos.fill(HIST("Hist2D_cent_nch"), mcTracks.size(), cent);
+        histos.fill(HIST("Hist2D_globalTracks_cent"), cent, mcTracks.size());
+        histos.fill(HIST("Hist2D_PVTracks_cent"), cent, multPV);
 
         memset(sumWiTruth, 0, sizeof(sumWiTruth));
         memset(sumWiptiTruth, 0, sizeof(sumWiptiTruth));
@@ -1887,7 +1839,7 @@ struct RadialFlowDecorr {
         memset(sumWiRecoEffCorr, 0, sizeof(sumWiRecoEffCorr));
         memset(sumWiptiRecoEffCorr, 0, sizeof(sumWiptiRecoEffCorr));
 
-        for (const auto& particle : partSlice) {
+        for (const auto& particle : mcParticles) {
           if (!isParticleSelected(particle) || !particle.isPhysicalPrimary())
             continue;
           float pt = particle.pt(), eta = particle.eta();
@@ -1931,7 +1883,7 @@ struct RadialFlowDecorr {
           }
         }
 
-        for (const auto& track : trackSlice) {
+        for (const auto& track : mcTracks) {
           if (!isTrackSelected(track))
             continue;
           float pt = track.pt(), eta = track.eta(), phi = track.phi();
@@ -2147,8 +2099,8 @@ struct RadialFlowDecorr {
         } // end ietaA
 
         double amplFT0A = 0, amplFT0C = 0;
-        if (col.has_foundFT0()) {
-          const auto& ft0 = col.foundFT0();
+        if (mcCollision.has_foundFT0()) {
+          const auto& ft0 = mcCollision.foundFT0();
           for (std::size_t iCh = 0; iCh < ft0.channelA().size(); iCh++) {
             auto chanelid = ft0.channelA()[iCh];
             float ampl = ft0.amplitudeA()[iCh];
@@ -2172,12 +2124,10 @@ struct RadialFlowDecorr {
         histos.fill(HIST("pmeanFT0A_cent"), cent, amplFT0A);
         histos.fill(HIST("pmeanFT0Cmultpv"), multPV, amplFT0C);
         histos.fill(HIST("pmeanFT0C_cent"), cent, amplFT0C);
-      }
-    }
   }
   PROCESS_SWITCH(RadialFlowDecorr, processMCMean, "process MC to calculate mean pt and Eff Hists", cfgRunMCMean);
 
-  void processMCFluc(aod::McCollisions const& mcColl, MyRun3MCCollisions const& collisions, TCs const& tracks, FilteredTCs const& /*filteredTracks*/, aod::FT0s const&, aod::McParticles const& mcParticles)
+  void processMCFluc(MyRun3MCCollisions::iterator const& mcCollision, FilteredTCs const& mcTracks, aod::FT0s const&, aod::McParticles const& mcParticles)
   {
     if (!state.pmeanTruNchEtabinSpbinStep2 || !state.pmeanRecoNchEtabinSpbinStep2 || !state.pmeanRecoEffcorrNchEtabinSpbinStep2 ||
         !state.pmeanMultTruNchEtabinSpbinStep2 || !state.pmeanMultRecoNchEtabinSpbinStep2 || !state.pmeanMultRecoEffcorrNchEtabinSpbinStep2) {
@@ -2202,33 +2152,23 @@ struct RadialFlowDecorr {
     double p1kBarTru[KNsp][KNEta]{}, p1kBarReco[KNsp][KNEta]{}, p1kBarRecoEffCor[KNsp][KNEta]{};
     double p1kBarTruMult[KNsp][KNEta]{}, p1kBarRecoMult[KNsp][KNEta]{}, p1kBarRecoEffCorMult[KNsp][KNEta]{};
 
-    for (const auto& mcCollision : mcColl) {
-      auto partSlice = mcParticles.sliceBy(partPerMcCollision, mcCollision.globalIndex());
-      auto colSlice = collisions.sliceBy(colPerMcCollision, mcCollision.globalIndex());
-      if (colSlice.size() != 1)
-        continue;
-
-      for (const auto& col : colSlice) {
-        if (!col.has_mcCollision() || !isEventSelected(col))
-          continue;
-
-        auto trackSlice = tracks.sliceBy(trackPerCollision, col.globalIndex());
-        if (trackSlice.size() < 1)
-          continue;
-
-        float cent = getCentrality(col);
+        if (!mcCollision.has_mcCollision() || !isEventSelected(mcCollision))
+          return;
+        float cent = getCentrality(mcCollision);
         if (cent > KCentMax)
-          continue;
-        float multPV = col.multNTracksPV();
+          return;
+        float multPV = mcCollision.multNTracksPV();
+        float vz = mcCollision.posZ();
+        if (!isPassAddPileup(multPV, mcTracks.size(), cent))
+          return;
 
-        if (!isPassAddPileup(multPV, trackSlice.size(), cent))
-          continue;
-
-        histos.fill(HIST("hVtxZ_after_sel"), col.posZ());
+        histos.fill(HIST("hVtxZ_after_sel"), mcCollision.posZ());
         histos.fill(HIST("hCentrality"), cent);
 
-        histos.fill(HIST("Hist2D_globalTracks_PVTracks"), col.multNTracksPV(), trackSlice.size());
-        histos.fill(HIST("Hist2D_cent_nch"), trackSlice.size(), cent);
+        histos.fill(HIST("Hist2D_globalTracks_PVTracks"), multPV, mcTracks.size());
+        histos.fill(HIST("Hist2D_cent_nch"), mcTracks.size(), cent);
+        histos.fill(HIST("Hist2D_globalTracks_cent"), cent, mcTracks.size());
+        histos.fill(HIST("Hist2D_PVTracks_cent"), cent, multPV);
 
         memset(sumPmwkTru, 0, sizeof(sumPmwkTru));
         memset(sumWkTru, 0, sizeof(sumWkTru));
@@ -2258,7 +2198,9 @@ struct RadialFlowDecorr {
 
         double p1kBarFt0A = 0.0, p1kBarFt0C = 0.0;
 
-        for (const auto& particle : partSlice) {
+
+
+        for (const auto& particle : mcParticles) {
           if (!isParticleSelected(particle) || !particle.isPhysicalPrimary())
             continue;
 
@@ -2297,9 +2239,9 @@ struct RadialFlowDecorr {
             }
           }
         } // end truth loop
-        float vz = col.posZ();
 
-        for (const auto& track : trackSlice) {
+
+        for (const auto& track : mcTracks) {
           if (!isTrackSelected(track))
             continue;
 
@@ -2322,8 +2264,8 @@ struct RadialFlowDecorr {
           for (int isp = 0; isp < KNsp; ++isp) {
             if (!isSpecies[isp])
               continue;
-            float eff = getEfficiency(col.multNTracksPV(), pt, eta, static_cast<PIDIdx>(isp), 0, cfgEff);
-            float fake = getEfficiency(col.multNTracksPV(), pt, eta, static_cast<PIDIdx>(isp), 1, cfgEff);
+            float eff = getEfficiency(multPV, pt, eta, static_cast<PIDIdx>(isp), 0, cfgEff);
+            float fake = getEfficiency(multPV, pt, eta, static_cast<PIDIdx>(isp), 1, cfgEff);
             float flatW = getFlatteningWeight(vz, sign, pt, eta, phi, static_cast<PIDIdx>(isp), cfgFlat);
             float w = flatW * (1.0 - fake) / eff;
 
@@ -2388,7 +2330,7 @@ struct RadialFlowDecorr {
         } // trkslice
 
         for (int ieta = 0; ieta < KNEta; ++ieta) {
-          const int ibx = state.pmeanTruNchEtabinSpbinStep2->GetXaxis()->FindBin(col.multNTracksPV());
+          const int ibx = state.pmeanTruNchEtabinSpbinStep2->GetXaxis()->FindBin(mcCollision.multNTracksPV());
           const int iby = ieta + 1;
 
           for (int isp = 0; isp < KNsp; ++isp) {
@@ -2430,8 +2372,8 @@ struct RadialFlowDecorr {
         }
 
         double amplFT0A = 0, amplFT0C = 0;
-        if (col.has_foundFT0()) {
-          const auto& ft0 = col.foundFT0();
+        if (mcCollision.has_foundFT0()) {
+          const auto& ft0 = mcCollision.foundFT0();
           for (std::size_t iCh = 0; iCh < ft0.channelA().size(); iCh++) {
             float ampl = ft0.amplitudeA()[iCh];
             amplFT0A += ampl;
@@ -2472,33 +2414,33 @@ struct RadialFlowDecorr {
           for (int isp = 0; isp < KNsp; ++isp) {
             if (std::isfinite(meanTru[isp][ieta])) {
               histos.fill(HIST("MCGen/Prof_MeanpT_Cent_etabin_spbin"), cent, ieta, isp, meanTru[isp][ieta]);
-              histos.fill(HIST("MCGen/Prof_MeanpT_Mult_etabin_spbin"), col.multNTracksPV(), ieta, isp, meanTru[isp][ieta]);
+              histos.fill(HIST("MCGen/Prof_MeanpT_Mult_etabin_spbin"), multPV, ieta, isp, meanTru[isp][ieta]);
             }
             if (std::isfinite(c2Tru[isp][ieta])) {
               histos.fill(HIST("MCGen/Prof_C2_Cent_etabin_spbin"), cent, ieta, isp, c2Tru[isp][ieta]);
-              histos.fill(HIST("MCGen/Prof_C2_Mult_etabin_spbin"), col.multNTracksPV(), ieta, isp, c2Tru[isp][ieta]);
+              histos.fill(HIST("MCGen/Prof_C2_Mult_etabin_spbin"), multPV, ieta, isp, c2Tru[isp][ieta]);
             }
             if (std::isfinite(meanReco[isp][ieta])) {
               histos.fill(HIST("MCReco/Prof_MeanpT_Cent_etabin_spbin"), cent, ieta, isp, meanReco[isp][ieta]);
-              histos.fill(HIST("MCReco/Prof_MeanpT_Mult_etabin_spbin"), col.multNTracksPV(), ieta, isp, meanReco[isp][ieta]);
+              histos.fill(HIST("MCReco/Prof_MeanpT_Mult_etabin_spbin"), multPV, ieta, isp, meanReco[isp][ieta]);
             }
             if (std::isfinite(c2Reco[isp][ieta])) {
               histos.fill(HIST("MCReco/Prof_C2_Cent_etabin_spbin"), cent, ieta, isp, c2Reco[isp][ieta]);
-              histos.fill(HIST("MCReco/Prof_C2_Mult_etabin_spbin"), col.multNTracksPV(), ieta, isp, c2Reco[isp][ieta]);
+              histos.fill(HIST("MCReco/Prof_C2_Mult_etabin_spbin"), multPV, ieta, isp, c2Reco[isp][ieta]);
             }
             if (std::isfinite(meanRecoEffCor[isp][ieta])) {
               histos.fill(HIST("MCRecoEffCorr/Prof_MeanpT_Cent_etabin_spbin"), cent, ieta, isp, meanRecoEffCor[isp][ieta]);
-              histos.fill(HIST("MCRecoEffCorr/Prof_MeanpT_Mult_etabin_spbin"), col.multNTracksPV(), ieta, isp, meanRecoEffCor[isp][ieta]);
+              histos.fill(HIST("MCRecoEffCorr/Prof_MeanpT_Mult_etabin_spbin"), multPV, ieta, isp, meanRecoEffCor[isp][ieta]);
             }
             if (std::isfinite(c2RecoEffCor[isp][ieta])) {
               histos.fill(HIST("MCRecoEffCorr/Prof_C2_Cent_etabin_spbin"), cent, ieta, isp, c2RecoEffCor[isp][ieta]);
-              histos.fill(HIST("MCRecoEffCorr/Prof_C2_Mult_etabin_spbin"), col.multNTracksPV(), ieta, isp, c2RecoEffCor[isp][ieta]);
+              histos.fill(HIST("MCRecoEffCorr/Prof_C2_Mult_etabin_spbin"), multPV, ieta, isp, c2RecoEffCor[isp][ieta]);
             }
           }
         }
 
-        p1kBarFt0A = amplFT0A - state.pmeanFT0AmultpvStep2->GetBinContent(state.pmeanFT0AmultpvStep2->GetXaxis()->FindBin(col.multNTracksPV()));
-        p1kBarFt0C = amplFT0C - state.pmeanFT0CmultpvStep2->GetBinContent(state.pmeanFT0CmultpvStep2->GetXaxis()->FindBin(col.multNTracksPV()));
+        p1kBarFt0A = amplFT0A - state.pmeanFT0AmultpvStep2->GetBinContent(state.pmeanFT0AmultpvStep2->GetXaxis()->FindBin(multPV));
+        p1kBarFt0C = amplFT0C - state.pmeanFT0CmultpvStep2->GetBinContent(state.pmeanFT0CmultpvStep2->GetXaxis()->FindBin(multPV));
 
         for (int ietaA = 1; ietaA <= (KNEta - 1) / 2; ++ietaA) {
           int ietaC = KNEta - ietaA;
@@ -2521,53 +2463,53 @@ struct RadialFlowDecorr {
 
             if (std::isfinite(c2SubTru)) {
               histos.fill(HIST("MCGen/Prof_C2Sub_Cent_etabin_spbin"), cent, ietaA, isp, c2SubTru);
-              histos.fill(HIST("MCGen/Prof_C2Sub_Mult_etabin_spbin"), col.multNTracksPV(), ietaA, isp, c2SubTru);
+              histos.fill(HIST("MCGen/Prof_C2Sub_Mult_etabin_spbin"), multPV, ietaA, isp, c2SubTru);
             }
             if (std::isfinite(c2SubReco)) {
               histos.fill(HIST("MCReco/Prof_C2Sub_Cent_etabin_spbin"), cent, ietaA, isp, c2SubReco);
-              histos.fill(HIST("MCReco/Prof_C2Sub_Mult_etabin_spbin"), col.multNTracksPV(), ietaA, isp, c2SubReco);
+              histos.fill(HIST("MCReco/Prof_C2Sub_Mult_etabin_spbin"), multPV, ietaA, isp, c2SubReco);
             }
             if (std::isfinite(c2SubRecoEffCor)) {
               histos.fill(HIST("MCRecoEffCorr/Prof_C2Sub_Cent_etabin_spbin"), cent, ietaA, isp, c2SubRecoEffCor);
-              histos.fill(HIST("MCRecoEffCorr/Prof_C2Sub_Mult_etabin_spbin"), col.multNTracksPV(), ietaA, isp, c2SubRecoEffCor);
+              histos.fill(HIST("MCRecoEffCorr/Prof_C2Sub_Mult_etabin_spbin"), multPV, ietaA, isp, c2SubRecoEffCor);
             }
             if (std::isfinite(covTru)) {
               histos.fill(HIST("MCGen/Prof_Cov_Cent_etabin_spbin"), cent, ietaA, isp, covTru);
-              histos.fill(HIST("MCGen/Prof_Cov_Mult_etabin_spbin"), col.multNTracksPV(), ietaA, isp, covTru);
+              histos.fill(HIST("MCGen/Prof_Cov_Mult_etabin_spbin"), multPV, ietaA, isp, covTru);
             }
             if (std::isfinite(covReco)) {
               histos.fill(HIST("MCReco/Prof_Cov_Cent_etabin_spbin"), cent, ietaA, isp, covReco);
-              histos.fill(HIST("MCReco/Prof_Cov_Mult_etabin_spbin"), col.multNTracksPV(), ietaA, isp, covReco);
+              histos.fill(HIST("MCReco/Prof_Cov_Mult_etabin_spbin"), multPV, ietaA, isp, covReco);
             }
             if (std::isfinite(covRecoEffCor)) {
               histos.fill(HIST("MCRecoEffCorr/Prof_Cov_Cent_etabin_spbin"), cent, ietaA, isp, covRecoEffCor);
-              histos.fill(HIST("MCRecoEffCorr/Prof_Cov_Mult_etabin_spbin"), col.multNTracksPV(), ietaA, isp, covRecoEffCor);
+              histos.fill(HIST("MCRecoEffCorr/Prof_Cov_Mult_etabin_spbin"), multPV, ietaA, isp, covRecoEffCor);
             }
 
             if (std::isfinite(covFT0ATru)) {
               histos.fill(HIST("MCGen/Prof_CovFT0A_Cent_etabin_spbin"), cent, ietaA, isp, covFT0ATru);
-              histos.fill(HIST("MCGen/Prof_CovFT0A_Mult_etabin_spbin"), col.multNTracksPV(), ietaA, isp, covFT0ATru);
+              histos.fill(HIST("MCGen/Prof_CovFT0A_Mult_etabin_spbin"), multPV, ietaA, isp, covFT0ATru);
             }
             if (std::isfinite(covFT0AReco)) {
               histos.fill(HIST("MCReco/Prof_CovFT0A_Cent_etabin_spbin"), cent, ietaA, isp, covFT0AReco);
-              histos.fill(HIST("MCReco/Prof_CovFT0A_Mult_etabin_spbin"), col.multNTracksPV(), ietaA, isp, covFT0AReco);
+              histos.fill(HIST("MCReco/Prof_CovFT0A_Mult_etabin_spbin"), multPV, ietaA, isp, covFT0AReco);
             }
             if (std::isfinite(covFT0ARecoEffCor)) {
               histos.fill(HIST("MCRecoEffCorr/Prof_CovFT0A_Cent_etabin_spbin"), cent, ietaA, isp, covFT0ARecoEffCor);
-              histos.fill(HIST("MCRecoEffCorr/Prof_CovFT0A_Mult_etabin_spbin"), col.multNTracksPV(), ietaA, isp, covFT0ARecoEffCor);
+              histos.fill(HIST("MCRecoEffCorr/Prof_CovFT0A_Mult_etabin_spbin"), multPV, ietaA, isp, covFT0ARecoEffCor);
             }
 
             if (std::isfinite(covFT0CTru)) {
               histos.fill(HIST("MCGen/Prof_CovFT0C_Cent_etabin_spbin"), cent, ietaA, isp, covFT0CTru);
-              histos.fill(HIST("MCGen/Prof_CovFT0C_Mult_etabin_spbin"), col.multNTracksPV(), ietaA, isp, covFT0CTru);
+              histos.fill(HIST("MCGen/Prof_CovFT0C_Mult_etabin_spbin"), multPV, ietaA, isp, covFT0CTru);
             }
             if (std::isfinite(covFT0CReco)) {
               histos.fill(HIST("MCReco/Prof_CovFT0C_Cent_etabin_spbin"), cent, ietaA, isp, covFT0CReco);
-              histos.fill(HIST("MCReco/Prof_CovFT0C_Mult_etabin_spbin"), col.multNTracksPV(), ietaA, isp, covFT0CReco);
+              histos.fill(HIST("MCReco/Prof_CovFT0C_Mult_etabin_spbin"), multPV, ietaA, isp, covFT0CReco);
             }
             if (std::isfinite(covFT0CRecoEffCor)) {
               histos.fill(HIST("MCRecoEffCorr/Prof_CovFT0C_Cent_etabin_spbin"), cent, ietaA, isp, covFT0CRecoEffCor);
-              histos.fill(HIST("MCRecoEffCorr/Prof_CovFT0C_Mult_etabin_spbin"), col.multNTracksPV(), ietaA, isp, covFT0CRecoEffCor);
+              histos.fill(HIST("MCRecoEffCorr/Prof_CovFT0C_Mult_etabin_spbin"), multPV, ietaA, isp, covFT0CRecoEffCor);
             }
           }
         }
@@ -2950,8 +2892,6 @@ struct RadialFlowDecorr {
             }
           }
         }
-      } // colSlice
-    } // mcColl
     LOGF(info, "FINISHED RUNNING processMCFluc");
   }
   PROCESS_SWITCH(RadialFlowDecorr, processMCFluc, "process MC to calculate pt fluc", cfgRunMCFluc);
@@ -2969,6 +2909,8 @@ struct RadialFlowDecorr {
 
     histos.fill(HIST("Hist2D_globalTracks_PVTracks"), coll.multNTracksPV(), tracks.size());
     histos.fill(HIST("Hist2D_cent_nch"), tracks.size(), cent);
+    histos.fill(HIST("Hist2D_globalTracks_cent"), cent, tracks.size());
+    histos.fill(HIST("Hist2D_PVTracks_cent"), cent, coll.multNTracksPV());
 
     int ntrk = 0;
     for (const auto& track : tracks) {
@@ -3016,6 +2958,8 @@ struct RadialFlowDecorr {
 
     histos.fill(HIST("Hist2D_globalTracks_PVTracks"), coll.multNTracksPV(), tracks.size());
     histos.fill(HIST("Hist2D_cent_nch"), tracks.size(), cent);
+    histos.fill(HIST("Hist2D_globalTracks_cent"), cent, tracks.size());
+    histos.fill(HIST("Hist2D_PVTracks_cent"), cent, coll.multNTracksPV());
 
     int ntrk = 0;
     float vz = coll.posZ();
@@ -3136,6 +3080,8 @@ struct RadialFlowDecorr {
 
     histos.fill(HIST("Hist2D_globalTracks_PVTracks"), coll.multNTracksPV(), tracks.size());
     histos.fill(HIST("Hist2D_cent_nch"), tracks.size(), cent);
+    histos.fill(HIST("Hist2D_globalTracks_cent"), cent, tracks.size());
+    histos.fill(HIST("Hist2D_PVTracks_cent"), cent, coll.multNTracksPV());
 
     float vz = coll.posZ();
 
@@ -3330,6 +3276,8 @@ struct RadialFlowDecorr {
 
     histos.fill(HIST("Hist2D_globalTracks_PVTracks"), coll.multNTracksPV(), tracks.size());
     histos.fill(HIST("Hist2D_cent_nch"), tracks.size(), cent);
+    histos.fill(HIST("Hist2D_globalTracks_cent"), cent, tracks.size());
+    histos.fill(HIST("Hist2D_PVTracks_cent"), cent, coll.multNTracksPV());
 
     if (!state.pmeanNchEtabinSpbinStep2 || !state.pmeanMultNchEtabinSpbinStep2) {
       LOGF(warning, "Data fluc: Mean pT or Mult map missing");
